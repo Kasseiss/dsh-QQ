@@ -644,6 +644,103 @@ async function handleImage(chat, event, promptParts, inbox) {
   if (saved.length) promptParts.push(saved.map((f) => `[发来一张图片，已存到 ${f}]`).join('\n'));
 }
 
+// 把非文本消息翻译成模型看得懂的说明，避免"这条我处理不了"
+const FACE_NAMES = {
+  0: '惊讶', 1: '撇嘴', 2: '色', 3: '发呆', 4: '得意', 5: '流泪', 6: '害羞',
+  7: '闭嘴', 8: '睡', 9: '大哭', 10: '尴尬', 11: '发怒', 12: '调皮', 13: '呲牙',
+  14: '微笑', 15: '难过', 16: '酷', 18: '抓狂', 19: '吐', 20: '偷笑', 21: '可爱',
+  22: '白眼', 23: '傲慢', 24: '饥饿', 25: '困', 26: '惊恐', 27: '流汗', 28: '憨笑',
+  29: '悠闲', 30: '奋斗', 31: '咒骂', 32: '疑问', 33: '嘘', 34: '晕', 35: '折磨',
+  36: '衰', 37: '骷髅', 38: '敲打', 39: '再见', 41: '发抖', 42: '爱情', 43: '跳跳',
+  49: '拥抱', 53: '蛋糕', 60: '咖啡', 63: '玫瑰', 66: '爱心', 74: '太阳', 75: '月亮',
+  76: '赞', 77: '踩', 78: '握手', 79: '胜利', 85: '飞吻', 86: '怄火', 89: '西瓜',
+  96: '冷汗', 99: '篮球', 100: '乒乓', 101: '咖啡', 102: '饭', 103: '猪头',
+  104: '玫瑰', 106: '嘴唇', 109: '强', 111: '弱', 116: '啤酒', 118: '茶',
+  120: '握手', 122: '怄火', 123: '鬼脸', 124: '猪头', 125: '扇耳光', 129: '挥手',
+  137: '鞭炮', 144: '喝彩', 147: '炸弹', 171: '茶', 173: '泪奔', 174: '无奈',
+  175: '卖萌', 176: '小纠结', 177: '喷血', 178: '斜眼笑', 179: 'doge', 180: '惊喜',
+  181: '骚扰', 182: '笑抽', 183: '亲亲', 184: 'cheese', 185: '经典表情', 186: '可爱',
+  187: '有钱', 188: '花痴', 189: '褶子笑', 190: '666', 191: '让我看看', 192: '叹气',
+  193: '右哼哼', 194: '左哼哼', 197: '鄙视', 198: '委屈', 199: '吃瓜', 200: '哼',
+  201: '失望', 202: '求求了', 203: '跪了', 212: '裂开',
+};
+
+async function describeSegments(event, inbox) {
+  const lines = [];
+  for (const seg of segmentsOf(event)) {
+    const d = seg.data || {};
+    switch (seg.type) {
+      case 'text':
+      case 'image':
+      case 'reply':
+        break;
+      case 'face': {
+        const name = FACE_NAMES[Number(d.id)] || '';
+        lines.push(`[对方发了个 QQ 自带表情${name ? `：${name}` : `（id=${d.id}）`}]`);
+        break;
+      }
+      case 'mface':
+      case 'market_face': {
+        const summary = d.summary || d.face_name || '表情包';
+        const url = d.url || d.emoji_url || d.emojiUrl || '';
+        if (url) {
+          try {
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), 15000);
+            const res = await fetch(url, { signal: ac.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+              const buf = Buffer.from(await res.arrayBuffer());
+              if (buf.length > 8 * 1024 * 1024) throw new Error('太大');
+              const file = path.join(inbox, `sticker-${Date.now()}-${randomUUID().slice(0, 6)}.gif`);
+              await writeFile(file, buf);
+              lines.push(`[对方发了个表情包「${summary}」，图已存到 ${file}，可以用 read_image 看]`);
+              break;
+            }
+          } catch { /* 下载失败就只报文字 */ }
+        }
+        lines.push(`[对方发了个表情包「${summary}」]`);
+        break;
+      }
+      case 'record':
+        lines.push(`[对方发了一段语音${d.duration ? `（${d.duration} 秒）` : ''}，没有转写]`);
+        break;
+      case 'video':
+        lines.push('[对方发了个视频，没看]');
+        break;
+      case 'file':
+        lines.push(`[对方发了个文件：${d.name || d.file || '未命名'}]`);
+        break;
+      case 'json':
+      case 'xml':
+        lines.push('[对方发了一张卡片/链接分享]');
+        break;
+      case 'poke':
+        lines.push('[对方戳了你一下]');
+        break;
+      case 'forward':
+        lines.push('[对方转发了一段聊天记录]');
+        break;
+      case 'dice':
+        lines.push(`[对方掷了个骰子：${d.result ?? '?'}]`);
+        break;
+      case 'rps':
+        lines.push('[对方玩了一把猜拳]');
+        break;
+      case 'at':
+        lines.push(`[对方 @ 了 ${d.qq === 'all' ? '所有人' : `某人(${d.qq})`}]`);
+        break;
+      case 'atall':
+        lines.push('[对方 @ 了所有人]');
+        break;
+      default:
+        log(`[未识别消息段] type=${seg.type} data=${JSON.stringify(d).slice(0, 120)}`);
+        break;
+    }
+  }
+  return lines;
+}
+
 // ── 主循环 ───────────────────────────────────────────────────────────────────
 let selfId = null;
 let ws = null;
@@ -788,9 +885,10 @@ async function onEvent(event) {
   await mkdir(inbox, { recursive: true });
   if (texts.trim()) parts.push(texts.trim());
   await handleImage(chat, event, parts, inbox);
+  for (const line of await describeSegments(event, inbox)) parts.push(line);
 
   if (!parts.length) {
-    await sendMessage(chat, '这条我处理不了（支持文字和图片）。');
+    await sendMessage(chat, '这条我处理不了（文字、图片、表情包、语音都能识别，其它类型先放过我）。');
     return;
   }
 

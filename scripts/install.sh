@@ -76,7 +76,7 @@ DSH_CLI="$WHALE_HOME/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js"
 
 # ── 3. 目录与文件 ────────────────────────────────────────────────────────────
 say "铺目录"
-mkdir -p "$WHALE_HOME"/{bridge,tools,stickers,qr,logs,state,games,napcat,home/work,home/profiles/headless}
+mkdir -p "$WHALE_HOME"/{bridge,tools,stickers,qr,logs,state,games,napcat/config,qq-config,home/work,home/profiles/headless}
 cp "$REPO_DIR/src/bridge.mjs" "$WHALE_HOME/bridge/bridge.mjs"
 cp "$REPO_DIR/src/life.mjs" "$WHALE_HOME/life.mjs"
 cp "$REPO_DIR/src/tools/"* "$WHALE_HOME/tools/"

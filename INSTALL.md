@@ -96,6 +96,41 @@ curl -s -X POST http://127.0.0.1:$(grep NAPCAT_HTTP /opt/whale-bot/config.env | 
 
 ---
 
+## 3.5 为什么扫这一次就够了（快速登录）
+
+腾讯会周期性把协议端的会话作废（日志里是 `[KickedOffLine] 你的账号当前登录已失效`）。
+如果**登录记录能落盘**，重启容器后 NapCat 会走「快速登录」，十几秒自动登回，不用再扫码：
+
+```
+[info] 正在快速登录  123456789
+（约 15 秒后）登录成功
+```
+
+**但这套镜像挂载有个坑**，踩了就会永远扫不完：
+
+> 镜像在 `/app/.config/QQ` 和 `/app/napcat/config` 上**声明了匿名卷**。
+> 只挂父目录（`-v xxx:/app/napcat`）时，匿名卷会把子目录整个盖住，
+> 容器里看到的还是空目录 → 登录记录永远不落盘 → 每次重启都是"新设备" → 只能扫码。
+
+`scripts/run-napcat.sh` 里已经按下面的方式挂好了（父目录 + 两个子路径都挂）：
+
+```bash
+-v "$WHALE_HOME/napcat:/app/napcat" \
+-v "$WHALE_HOME/napcat/config:/app/napcat/config" \
+-v "$WHALE_HOME/qq-config:/app/.config/QQ" \
+```
+
+验证是否生效：
+
+```bash
+docker exec napcat ls /app/.config/QQ          # 应该能看到 nt_qq_xxxxxxxx 目录
+docker inspect napcat --format '{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}{{println}}{{end}}'
+```
+
+看到 `nt_qq_*` 就说明登录态已经在宿主机上了。之后腾讯踢你，`qq-health` 会在 3 分钟内重启容器自动登回。
+
+---
+
 ## 4. 启动
 
 ```bash

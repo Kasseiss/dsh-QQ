@@ -32,8 +32,8 @@ curl -s -o /dev/null -w 'qq %{http_code}\n'       https://txz.qq.com
 ## 1. 一键安装
 
 ```bash
-git clone https://github.com/<you>/whale-bot.git
-cd whale-bot
+git clone https://github.com/Kasseiss/dsh-QQ.git
+cd dsh-QQ
 sudo bash scripts/install.sh --qq 机器人QQ号 --owner 你的QQ号 [--guest 客人QQ号]
 ```
 

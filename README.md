@@ -51,8 +51,8 @@ QQ ──(OneBot v11)──▶ NapCat（Docker，自带 QQNT）
 前置：一台 Linux 服务器（Ubuntu 22.04 测过）、root、装了 Docker、**能访问外网**。
 
 ```bash
-git clone https://github.com/<you>/whale-bot.git
-cd whale-bot
+git clone https://github.com/Kasseiss/dsh-QQ.git
+cd dsh-QQ
 sudo bash scripts/install.sh --qq <机器人QQ号> --owner <你的QQ号>
 ```
 

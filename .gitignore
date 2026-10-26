@@ -1,0 +1,27 @@
+# 运行时数据（绝不入库）
+logs/
+state/
+sessions.json
+qr/
+stickers/
+games/
+napcat/
+node_modules/
+home/
+
+# 本地密钥
+config.env
+.env
+*.credentials.yaml
+credentials.yaml
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# 临时
+*.log
+*.tmp

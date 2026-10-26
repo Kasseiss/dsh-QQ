@@ -55,5 +55,6 @@
     ],
     "dailyCap": 10,
     "userActiveWindowMin": 12
-  }
+  },
+  "stickerIndex": ""
 }

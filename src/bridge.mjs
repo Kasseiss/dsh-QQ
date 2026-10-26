@@ -354,6 +354,17 @@ async function runAgent({ chat, prompt, sessionId, cwd }) {
     windowsHide: true,
   });
 
+  // 记下这次运行，方便"用户还在打字"时掐掉重来（见 bufferMessage）
+  let killedByUser = false;
+  activeRuns.set(chat.key, {
+    pid: child.pid,
+    startedAt: Date.now(),
+    kill: async () => {
+      killedByUser = true;
+      try { await killTree(child.pid); } catch { /* ignore */ }
+    },
+  });
+
   let stdout = '';
   let stderr = '';
   let timedOut = false;
@@ -390,12 +401,14 @@ async function runAgent({ chat, prompt, sessionId, cwd }) {
     child.on('close', (c) => resolve(c ?? -1));
   });
   clearTimeout(timer);
+  if (activeRuns.get(chat.key)?.pid === child.pid) activeRuns.delete(chat.key);
 
-  return { text: finalText, sessionId: newSessionId, code, stderr, timedOut, sawFinal };
+  return { text: finalText, sessionId: newSessionId, code, stderr, timedOut, sawFinal, killed: killedByUser };
 }
 
 // ── 队列 ─────────────────────────────────────────────────────────────────────
 const chatQueues = new Map();     // chatKey -> { chain: Promise, depth: number }
+const activeRuns = new Map();     // chatKey -> { pid, startedAt, kill } 正在跑的模型进程
 let running = 0;
 const waiters = [];
 
@@ -473,7 +486,7 @@ function mentionsSelf(event, selfId) {
 
 const COMMANDS = new Set(['/new', '/reset', '/s', '/status', '/help', '重置', '新会话']);
 
-async function handleText(chat, event, prompt, raw = '') {
+async function handleText(chat, event, prompt, raw = '', parts = [], rawEvent = null) {
   // 指令判定要看用户原文，不能带 [QQ私聊｜xxx] 这种前缀
   const trimmed = (raw || prompt).trim();
   if (!prompt.trim()) { await sendMessage(chat, '空消息，我这边没什么可答的。'); return; }
@@ -544,6 +557,14 @@ async function handleText(chat, event, prompt, raw = '') {
     result = await runAgent({ chat, prompt: fullPrompt, sessionId: previous, cwd });
   } finally {
     clearTimeout(progressTimer);
+  }
+
+  // 跑到一半对方又发消息了：这次作废，内容并回下一轮一起答
+  if (result.killed) {
+    await setTyping(chat, false);
+    await log(`[等他说完] ${chat.key} 本次生成被掐掉，内容并回下一轮`);
+    bufferMessage(chat, rawEvent || event, parts.length ? parts : [raw || prompt], true);
+    return;
   }
 
   // 会话失效（换了 cwd / 会话被删）时，自动重开一次
@@ -918,15 +939,28 @@ async function setTyping(chat, on) {
 function bufferMessage(chat, event, parts, immediate = false) {
   const hz = cfg.humanize || {};
   const key = chat.key;
+
+  // 对方还在补话：如果模型正跑到一半（而且刚开跑不久），掐掉这次，等他发完再一起答
+  const active = activeRuns.get(key);
+  if (active && Date.now() - active.startedAt < (hz.restartWindowMs ?? 25000)) {
+    void active.kill();
+    void log(`[等他说完] ${key} 又发了一条，掐掉刚开始的那次生成`);
+  }
+
   let slot = pendingByChat.get(key);
   if (!slot) {
-    slot = { chat, event, parts: [], timer: null };
+    slot = { chat, event, parts: [], timer: null, firstAt: Date.now() };
     pendingByChat.set(key, slot);
   }
   slot.parts.push(...parts);
   slot.event = event;
   if (slot.timer) clearTimeout(slot.timer);
-  const wait = immediate ? 0 : (hz.debounceMs ?? 4000);
+
+  // 攒的时间从"第一条"算起，最多等 maxDebounceMs，避免对方一直发、她一直不答
+  const debounce = hz.debounceMs ?? 7000;
+  const cap = hz.maxDebounceMs ?? 20000;
+  const elapsed = Date.now() - slot.firstAt;
+  const wait = immediate ? 0 : Math.max(0, Math.min(debounce, cap - elapsed));
   slot.timer = setTimeout(() => { void flushPending(key); }, wait);
 }
 
@@ -939,7 +973,7 @@ async function flushPending(key) {
   const header = `[${isGroup ? 'QQ群聊' : 'QQ私聊'}｜${nickOf(event)}(${event.user_id})${isGroup ? `｜群${chat.id}` : ''}]`;
   const prompt = `${header}\n${parts.join('\n')}`;
   await log(`合并后交给模型 ${chat.key}（${parts.length} 条）: ${prompt.replace(/\n/g, ' ⏎ ').slice(0, 160)}`);
-  const accepted = enqueue(chat, async () => { await handleText(chat, event, prompt, parts.join('\n')); });
+  const accepted = enqueue(chat, async () => { await handleText(chat, event, prompt, parts.join('\n'), parts, event); });
   if (!accepted) await sendMessage(chat, '排队的活太多了，这条先放着，过会儿再发？');
 }
 

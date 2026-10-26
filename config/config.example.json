@@ -36,7 +36,7 @@
 
   "humanize": {
     "enabled": true,
-    "debounceMs": 4000,
+    "debounceMs": 7000,
     "minDelayMs": 1600,
     "perCharMs": 26,
     "maxDelayMs": 16000,

@@ -163,8 +163,10 @@ cfg = {
   "globalPerMinute": 20,
   "humanize": {"enabled": True, "debounceMs": 7000, "minDelayMs": 1600, "perCharMs": 26,
                "maxDelayMs": 16000, "jitterMs": 900, "typing": True, "skipToken": "[[跳过]]"},
-  "life": {"minGapMinutes": 3, "maxGapMinutes": 40, "quietHours": [1, 8],
-           "dailyCap": 10, "userActiveWindowMin": 12},
+  "life": {"slots": ["07:30-08:30", "12:00-13:30", "18:00-19:30", "21:00-23:30"],
+           "slotMinGapMinutes": 6, "slotMaxGapMinutes": 20,
+           "idleMinGapMinutes": 50, "idleMaxGapMinutes": 110,
+           "quietHours": [1, 7], "dailyCap": 10, "userActiveWindowMin": 12},
 }
 json.dump(cfg, open(os.path.join(home, "bridge/config.json"), "w", encoding="utf-8"),
           ensure_ascii=False, indent=2)

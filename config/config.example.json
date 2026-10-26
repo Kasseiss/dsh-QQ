@@ -1,39 +1,33 @@
 {
   "_comment": "这是参考样例；install.sh 会按你的 QQ 号和机器路径生成真正的 bridge/config.json，不用手抄。",
-
   "onebotHttp": "http://127.0.0.1:39000",
   "onebotWs": "ws://127.0.0.1:39001",
   "token": "换成你的 OneBot token，和 NapCat 里的一致",
-
   "dshHome": "/opt/whale-bot/home",
   "dshBin": "/opt/whale-bot/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js",
   "dshProfile": "headless",
   "workDir": "/opt/whale-bot/home/work",
-
   "stickersDir": "/opt/whale-bot/stickers",
   "stickerMaxPerReply": 1,
-
   "dangerFullAccess": true,
-
-  "allowUsers": [123456789],
+  "allowUsers": [
+    123456789
+  ],
   "guestUsers": [],
   "guestPermissionMode": "read-only",
   "allowGroups": [],
   "groupAtOnly": true,
   "friendRequestPolicy": "owner-approve",
   "pairing": true,
-
   "maxConcurrent": 2,
   "queueLimit": 20,
   "queueTimeoutMs": 120000,
   "runTimeoutMs": 600000,
   "progressAfterMs": 45000,
-
   "chunkSize": 900,
   "chunkGapMs": 900,
   "minGapPerChatMs": 1500,
   "globalPerMinute": 20,
-
   "humanize": {
     "enabled": true,
     "debounceMs": 7000,
@@ -44,11 +38,21 @@
     "typing": true,
     "skipToken": "[[跳过]]"
   },
-
   "life": {
-    "minGapMinutes": 3,
-    "maxGapMinutes": 40,
-    "quietHours": [1, 8],
+    "slots": [
+      "07:30-08:30",
+      "12:00-13:30",
+      "18:00-19:30",
+      "21:00-23:30"
+    ],
+    "slotMinGapMinutes": 6,
+    "slotMaxGapMinutes": 20,
+    "idleMinGapMinutes": 50,
+    "idleMaxGapMinutes": 110,
+    "quietHours": [
+      1,
+      7
+    ],
     "dailyCap": 10,
     "userActiveWindowMin": 12
   }

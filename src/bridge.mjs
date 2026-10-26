@@ -15,7 +15,7 @@
  */
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, appendFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, appendFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -515,6 +515,30 @@ async function handleText(chat, event, prompt, raw = '', parts = [], rawEvent = 
       await log('处理好友请求失败:', error.message);
       await sendMessage(chat, `没处理成功：${error.message}（申请可能已经过期，让对方再发一次）`);
     }
+    return;
+  }
+
+  // 主人说「在忙 / 别找我」→ 这段时间主动消息停掉
+  const busyMatch = trimmed.match(/^[\/／]?\s*(?:我)?(?:现在)?(在忙|忙|别找我|别烦我|先别找我|别打扰我|安静一会|安静会儿|静音)(?:\s*(\d+(?:\.\d+)?)\s*(小时|h|分钟|min|m)?)?\s*$/i);
+  const freeMatch = trimmed.match(/^[\/／]?\s*(?:我)?(不忙了|可以找我了|解除|我不忙了|解除静音|忙完了)\s*$/);
+  if (isOwner && (busyMatch || freeMatch)) {
+    const busyFile = path.join(HERE, '..', 'state', 'busy.json');
+    await mkdir(path.dirname(busyFile), { recursive: true });
+    if (freeMatch) {
+      await rm(busyFile, { force: true });
+      await sendMessage(chat, '行，那我该找你还找你。');
+      await log('主人解除了"在忙"状态');
+      return;
+    }
+    const amount = Number(busyMatch[2] || 2);
+    const unit = (busyMatch[3] || '小时').toLowerCase();
+    const hours = /分钟|min|m$/.test(unit) ? amount / 60 : amount;
+    const until = Date.now() + Math.max(1, hours) * 3600 * 1000;
+    await writeFile(busyFile, JSON.stringify({ until, note: trimmed.slice(0, 30), at: new Date().toISOString() }));
+    const t = new Date(until);
+    const hhmm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    await sendMessage(chat, `好，${hhmm} 之前不打扰你。忙完了说一句「不忙了」就行。`);
+    await log(`主人说在忙，主动消息停到 ${hhmm}`);
     return;
   }
 

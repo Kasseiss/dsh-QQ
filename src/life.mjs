@@ -38,27 +38,55 @@ if (!target) { console.error('config 没有 allowUsers'); process.exit(1); }
 await mkdir(STATE_DIR, { recursive: true });
 
 const L = cfg.life || {};
-const minGapMin = L.minGapMinutes ?? 3;       // 两次"醒着"之间最短
-const maxGapMin = L.maxGapMinutes ?? 65;      // 最长
-const quiet = L.quietHours || [1, 8];         // 静音时段
+const quiet = L.quietHours || [1, 8];         // 深夜绝对静音
 const dailyCap = L.dailyCap ?? 10;            // 每天最多主动发几次
 const userActiveWindow = L.userActiveWindowMin ?? 12;  // 主人刚说过话的窗口内不打扰
 
+// 活跃时段：只在主人习惯聊天的几个时间段里勤快，其余时间几乎不打扰
+const slots = (L.slots || ['12:00-13:00', '18:00-19:30', '21:00-23:00'])
+  .map((s) => String(s).split('-').map((t) => t.trim()))
+  .filter((p) => p.length === 2)
+  .map(([a, b]) => ({ start: hhmm(a), end: hhmm(b) }));
+
 const now = Date.now();
-const hour = new Date().getHours();
-const today = new Date().toISOString().slice(0, 10);
+const d0 = new Date(now);
+const hour = d0.getHours();
+const minutesNow = hour * 60 + d0.getMinutes();
+const today = d0.toISOString().slice(0, 10);
+
+function hhmm(text) {
+  const [h, m] = String(text).split(':').map((x) => Number(x));
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+function inSlot() {
+  return slots.find((s) => (s.start <= s.end
+    ? minutesNow >= s.start && minutesNow < s.end
+    : minutesNow >= s.start || minutesNow < s.end));
+}
+
+const slot = inSlot();
+const gapMin = slot ? (L.slotMinGapMinutes ?? 6) : (L.idleMinGapMinutes ?? 50);
+const gapMax = slot ? (L.slotMaxGapMinutes ?? 20) : (L.idleMaxGapMinutes ?? 110);
 
 const state = await readJson(STATE, { date: today, sentToday: 0, lastSentAt: 0, lastInboundAt: 0, nextDue: 0, log: [] });
 if (state.date !== today) { state.date = today; state.sentToday = 0; }
+
+// 主人说"在忙"：在这之前一次都不打扰
+const busy = await readJson(path.join(STATE_DIR, 'busy.json'), { until: 0, note: '' });
+const busyLeft = busy.until && busy.until > now ? Math.round((busy.until - now) / 60000) : 0;
 
 const inbound = await readInboundAt();
 const minSinceUser = inbound ? (now - inbound) / 60000 : 1e9;
 
 if (MODE === 'status') {
   console.log(JSON.stringify({
-    now: new Date(now).toLocaleString('zh-CN', { hour12: false }),
+    now: d0.toLocaleString('zh-CN', { hour12: false }),
     nextDue: state.nextDue ? new Date(state.nextDue).toLocaleString('zh-CN', { hour12: false }) : '(未安排)',
     inMinutes: state.nextDue ? Math.round((state.nextDue - now) / 60000) : null,
+    activeSlot: slot ? `${String(Math.floor(slot.start / 60)).padStart(2, '0')}:${String(slot.start % 60).padStart(2, '0')}-${String(Math.floor(slot.end / 60)).padStart(2, '0')}:${String(slot.end % 60).padStart(2, '0')}` : '(不在活跃时段)',
+    gapRange: `${gapMin}-${gapMax} 分钟`,
+    busyLeftMinutes: busyLeft || 0,
     sentToday: state.sentToday, dailyCap,
     minutesSinceUser: Math.round(minSinceUser),
     lastEntries: (state.log || []).slice(-5),
@@ -69,14 +97,15 @@ if (MODE === 'status') {
 // 没到点就别动
 if (MODE !== 'now' && state.nextDue && now < state.nextDue) process.exit(0);
 
-// 硬性过滤：静音 / 主人刚在聊 / 今天说太多
+// 硬性过滤：在忙 / 静音 / 主人刚在聊 / 今天说太多
 const skipReasons = [];
+if (busyLeft > 0) skipReasons.push(`主人说过在忙，还剩 ${busyLeft} 分钟${busy.note ? `（${busy.note}）` : ''}`);
 if (hour >= quiet[0] && hour < quiet[1]) skipReasons.push('静音时段');
 if (minSinceUser < userActiveWindow) skipReasons.push(`主人 ${Math.round(minSinceUser)} 分钟前才说过话`);
 if (state.sentToday >= dailyCap) skipReasons.push(`今天已说 ${state.sentToday} 次，到顶`);
 
 if (skipReasons.length) {
-  await log(`[跳过] ${skipReasons.join('；')}`);
+  await log(`[跳过] ${skipReasons.join('；')}${slot ? '' : '｜不在活跃时段'}`);
   await scheduleNext(state, now, L);
   process.exit(0);
 }
@@ -160,10 +189,17 @@ await log(`[发送] ${text.slice(0, 100)}${selfChosenGap ? `（下次 ${selfChos
 
 // ─────────────────────────────────────────────────────────
 async function scheduleNext(state, now, L, chosen = 0) {
-  const gap = chosen > 0
-    ? chosen
-    : (L.minGapMinutes ?? 3) + Math.random() * ((L.maxGapMinutes ?? 65) - (L.minGapMinutes ?? 3));
-  state.nextDue = now + Math.round(gap) * 60000;
+  let gap;
+  if (chosen > 0) {
+    gap = chosen;                        // 她自己定的
+  } else if (busyLeft > 0) {
+    gap = busyLeft + 2;                  // 主人在忙，等他解除后的两分钟
+  } else if (slot) {
+    gap = (L.slotMinGapMinutes ?? 6) + Math.random() * ((L.slotMaxGapMinutes ?? 20) - (L.slotMinGapMinutes ?? 6));
+  } else {
+    gap = (L.idleMinGapMinutes ?? 50) + Math.random() * ((L.idleMaxGapMinutes ?? 110) - (L.idleMinGapMinutes ?? 50));
+  }
+  state.nextDue = now + Math.round(Math.max(1, gap)) * 60000;
   await writeFile(STATE, JSON.stringify(state, null, 1));
 }
 

@@ -281,9 +281,44 @@ function extractMarkdownImages(text) {
   return { text: stripped.replace(/[ \t]+\n/g, '\n').trim(), images };
 }
 
+/** 把插件给的网页相对路径映射到磁盘文件（headless 没有 HTTP 路由） */
+function resolvePluginAsset(urlPath) {
+  const clean = String(urlPath).split('?')[0];
+  const base = path.basename(clean);
+  if (!base || !base.includes('.')) return '';
+  const stem = base.replace(/\.[^.]+$/, '');
+  const exts = ['.gif', '.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+  const roots = [
+    path.join(cfg.dshHome || '', 'nekowhale-stickers', 'byhash'),
+    path.join(cfg.dshHome || '', 'nekowhale-stickers'),
+    path.join(cfg.dshHome || '', 'nekowhale-stickers', 'cache', 'meme'),
+  ];
+  for (const root of roots) {
+    if (!root) continue;
+    if (existsSync(path.join(root, base))) return path.join(root, base);
+    for (const ext of exts) {
+      const hit = path.join(root, stem + ext);
+      if (existsSync(hit)) return hit;
+    }
+  }
+  return '';
+}
+
 async function sendMarkdownImage(chat, { alt, src }) {
   let localPath = src;
   if (localPath.startsWith('file://')) localPath = decodeURIComponent(localPath.slice(7));
+
+  // 插件返回的是"网页里的相对路径"，比如 /x-nekowhale-stickers/s/36658d3be504.gif
+  // 那套 HTTP 路由只在网页版存在；headless 里没有服务器，fetch 必失败。
+  // 但文件其实就在 DSH_HOME 里，直接按 hash 找出来发。
+  if (localPath.startsWith('/') && !localPath.startsWith('//')) {
+    const mapped = resolvePluginAsset(localPath);
+    if (mapped) {
+      await log(`相对路径 ${localPath} → 本地 ${mapped}`);
+      localPath = mapped;
+    }
+  }
+
   if (/^https?:\/\//i.test(localPath)) {
     // 远程图：先下下来再发，避免 QQ 拉不到内网地址
     const ac = new AbortController();

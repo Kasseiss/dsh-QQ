@@ -65,14 +65,25 @@ for r in json.load(open('/tmp/node-index.json')):
   ok "$($NODE -v)"
 fi
 
+# 让后面的 npm / 子进程都用这份 node（系统自带的 node 20 跑不了 dsh）
+export PATH="$WHALE_HOME/node24/bin:$PATH"
+
 # ── 2. DSH ──────────────────────────────────────────────────────────────────
 say "装 DeepSeek Harness $DSH_VERSION"
 mkdir -p "$WHALE_HOME/dsh"
 cd "$WHALE_HOME/dsh"
 [ -f package.json ] || echo '{"name":"whale-dsh","private":true,"type":"module"}' > package.json
-npm i "@deepseek-ai/dsh@$DSH_VERSION" ws --no-audit --no-fund --registry=https://registry.npmjs.org 2>&1 | tail -3
+npm i "@deepseek-ai/dsh@$DSH_VERSION" --no-audit --no-fund --registry=https://registry.npmjs.org 2>&1 | tail -3
 DSH_CLI="$WHALE_HOME/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js"
 [ -f "$DSH_CLI" ] && ok "dsh 就位" || { echo "dsh 装失败"; exit 1; }
+
+# 桥接自己的依赖装在自己目录下（Node 不会去 ../dsh/node_modules 找）
+say "装桥接依赖"
+mkdir -p "$WHALE_HOME/bridge"
+cd "$WHALE_HOME/bridge"
+[ -f package.json ] || echo '{"name":"whale-bridge","private":true,"type":"module","dependencies":{"ws":"^8.18.0"}}' > package.json
+npm i --omit=dev --no-audit --no-fund --registry=https://registry.npmjs.org 2>&1 | tail -2
+[ -d "$WHALE_HOME/bridge/node_modules/ws" ] && ok "ws 就位" || { echo "ws 装失败"; exit 1; }
 
 # ── 3. 目录与文件 ────────────────────────────────────────────────────────────
 say "铺目录"
@@ -205,18 +216,20 @@ mv "$WHALE_HOME/home/work/AGENTS.md.tmp" "$WHALE_HOME/home/AGENTS.md"
 mv "$WHALE_HOME/home/work/self.md.tmp" "$WHALE_HOME/home/work/self.md"
 ok "提示词就位"
 
+# 服务读的环境文件（没有它 systemd 会直接起不来）
+if [ ! -f "$WHALE_HOME/.env" ]; then
+  cat > "$WHALE_HOME/.env" <<'EOF'
+# 桥接/生活调度进程的环境变量，按需填。留空也能跑。
+# 例：知乎 cli 的密钥
+# ZHIHU_ACCESS_SECRET=xxxxxx
+EOF
+  chmod 600 "$WHALE_HOME/.env"
+fi
+ok "环境文件就位"
+
 # ── 5. systemd ──────────────────────────────────────────────────────────────
 if [ "$NO_SYSTEMD" -eq 0 ]; then
 say "写 systemd 单元"
-for unit in qq-bridge qq-life qq-health qq-qr; do
-  case "$unit" in
-    qq-bridge) desc="鲸鲸 QQ ↔ DSH 桥接";; 
-    qq-life)   desc="鲸鲸自己的生活调度";;
-    qq-health) desc="鲸鲸在线巡检";;
-    qq-qr)     desc="登录二维码静态服务";;
-  esac
-  true
-done
 
 cat > /etc/systemd/system/qq-bridge.service <<EOF
 [Unit]
@@ -228,7 +241,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=$WHALE_HOME/bridge
 Environment=WHALE_HOME=$WHALE_HOME
-EnvironmentFile=$WHALE_HOME/.env
+EnvironmentFile=-$WHALE_HOME/.env
 ExecStart=$NODE $WHALE_HOME/bridge/bridge.mjs
 Restart=always
 RestartSec=5
@@ -249,7 +262,7 @@ Wants=qq-bridge.service
 Type=oneshot
 WorkingDirectory=$WHALE_HOME
 Environment=WHALE_HOME=$WHALE_HOME
-EnvironmentFile=$WHALE_HOME/.env
+EnvironmentFile=-$WHALE_HOME/.env
 EnvironmentFile=-$WHALE_HOME/config.env
 ExecStart=$NODE $WHALE_HOME/life.mjs --tick
 TimeoutStartSec=900

@@ -857,7 +857,7 @@ function humanDelay(textLen, elapsedMs) {
 async function main() {
   cfg = await loadConfig();
   if (!cfg.dshHome || !existsSync(path.join(cfg.dshHome, '.credentials.yaml'))) {
-    console.error(`找不到 DSH_HOME 的凭证文件：${cfg.dshHome}\\.credentials.yaml\n先按 README 跑一次 setup。`);
+    console.error(`找不到 DSH_HOME 的凭证文件：${path.join(cfg.dshHome, '.credentials.yaml')}\n先按 README 跑一次 setup。`);
     process.exit(1);
   }
   if (!existsSync(cfg.dshBin)) {

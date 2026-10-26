@@ -110,6 +110,12 @@ A：改 `bridge/config.json` 里的 `life`：
 **Q：她刷 B 站会不会乱说？**
 A：不会。工具是真的调接口拿数据（`tools/bili.py`），prompt 明确要求"不许编"，并且有空转检测——没调工具只说空话会被打回重跑。
 
+**Q：`qq-bridge` 起不来，报 `Cannot find package 'ws'`？**
+A：装到了旧版本。`ws` 必须装在 `$WHALE_HOME/bridge/node_modules`（桥接自己的目录），不能跟 dsh 混在一起——Node 不会去 `../dsh/node_modules` 找依赖。重新拉一份 `scripts/install.sh` 跑一遍即可。
+
+**Q：`qq-bridge` 报 `Failed to load environment files`？**
+A：`$WHALE_HOME/.env` 不存在。新版单元里已改成可选（`EnvironmentFile=-…`），并会生成一个空的 `.env`；旧版手动 `touch /opt/whale-bot/.env` 也行。
+
 ---
 
 ## 用到的第三方

@@ -184,6 +184,9 @@ bash /opt/whale-bot/scripts/fetch-stickers.sh      # 从 ChineseBQB 抓一批
 | `MISSING_CREDENTIAL` | 凭证没放对位置，或 profile 里 provider 不是 `deepseek-account` |
 | 她回得特别慢 | 正常：拟人延迟按字数算，最长 16 秒；`logs/bridge-stdout.log` 里能看到 `等 x.xs 再发` |
 | 她一直不说话 | `life.mjs --status` 看 `nextDue` 和 `minutesSinceUser`；`userActiveWindowMin` 内不会主动打扰 |
+| `Cannot find package 'ws'` | `ws` 必须在 `$WHALE_HOME/bridge/node_modules`。重跑新版 `scripts/install.sh`，或手动 `cd /opt/whale-bot/bridge && npm i ws` |
+| `Failed to load environment files` | 缺 `$WHALE_HOME/.env`；`touch` 一个空的即可（新版已改成可选） |
+| 每次重启都要扫码 | 登录态没落盘，见 [3.5](#35-为什么扫这一次就够了快速登录)——检查 `docker exec napcat ls /app/.config/QQ` 有没有 `nt_qq_*` |
 
 ---
 

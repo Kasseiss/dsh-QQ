@@ -161,9 +161,9 @@ cfg = {
   "chunkGapMs": 900,
   "minGapPerChatMs": 1500,
   "globalPerMinute": 20,
-  "humanize": {"enabled": True, "debounceMs": 4000, "minDelayMs": 1600, "perCharMs": 26,
+  "humanize": {"enabled": True, "debounceMs": 7000, "minDelayMs": 1600, "perCharMs": 26,
                "maxDelayMs": 16000, "jitterMs": 900, "typing": True, "skipToken": "[[跳过]]"},
-  "life": {"minGapMinutes": 3, "maxGapMinutes": 65, "quietHours": [1, 8],
+  "life": {"minGapMinutes": 3, "maxGapMinutes": 40, "quietHours": [1, 8],
            "dailyCap": 10, "userActiveWindowMin": 12},
 }
 json.dump(cfg, open(os.path.join(home, "bridge/config.json"), "w", encoding="utf-8"),

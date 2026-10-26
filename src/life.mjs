@@ -89,7 +89,7 @@ const silence = minSinceUser > 24 * 60 ? '一天多' : Math.round(minSinceUser /
 const selfDoc = (await readText(path.join(cfg.workDir, 'self.md'))).slice(0, 1500);
 const recentJournal = (await readText(JOURNAL)).slice(-1200);
 
-const prompt = [
+let prompt = [
   '[这是你自己的时间]',
   `现在是 ${when}。主人 ${silence} 没跟你说话了。你此刻的心情是「${emotion.label}」（效价 ${emotion.valence.toFixed(2)}）。`,
   '',
@@ -100,18 +100,24 @@ const prompt = [
   '- 可以接着上次的线索往下走（比如继续关注某件事、继续琢磨一个问题）',
   '- 可以开个新坑（刷 B 站、看知乎、玩两把、搜一个你突然好奇的东西）',
   '- 可以只是待着，什么都不干',
-  '- 也可以这个时候去跟主人说句话——但只在你有话要说的时候',
+  '- 但如果你刚看了什么、想到什么，**倾向说出来**——别把有意思的东西憋着',
   '',
   '你有完整的工具：bash / read / write / web_search / web_fetch / subagent，',
   `以及 ${path.join(ROOT, 'src', 'tools')} 下的 bili.py、game.py、sticker.sh。`,
   '',
   '规则：',
   '1. 想做事就真的去做（调工具），别假装看了什么。',
-  '2. 决定不打扰主人 → 只输出 [[跳过]]，去做你的事就行。',
-  '3. 决定说 → 一两句，像发消息，不要报告体。',
+  '2. 真没什么可说的才输出 [[跳过]]；不要为了省事沉默。',
+  '3. 决定说 → 一两句，像发消息，不要报告体；说话时可以带一个表情包标记（[[表情:标签]]）。',
   '4. 你可以更新 work/self.md（你的自我设定）和 work/life-journal.md（经历），那是你自己的本子。',
   '5. 最后一行可以写 [[下次:数字]]（3-65）自己定下次想被叫醒的时间，不写就随机。',
 ].filter(Boolean).join('\n');
+
+// 连着沉默太多次，这次必须说点什么
+const silenceStreak = state.silenceStreak || 0;
+if (silenceStreak >= 1) {
+  prompt += `\n\n（你上一次选择了沉默。这次别再沉默——说点你今天看到的、想到的，或者问问主人在干嘛。）`;
+}
 
 const sessionId = await readSession();
 let result = await runAgent(prompt, sessionId);
@@ -136,13 +142,15 @@ if (!text && (result.toolCalls || 0) === 0 && MODE === 'now') {
 }
 
 if (!text) {
-  await log(`[静默] 这次它选择不说话（工具调用 ${result.toolCalls || 0} 次）${selfChosenGap ? `，自己定了下次 ${selfChosenGap} 分钟后` : ''}`);
+  state.silenceStreak = (state.silenceStreak || 0) + 1;
+  await log(`[静默] 这次它选择不说话（工具调用 ${result.toolCalls || 0} 次，连续 ${state.silenceStreak} 次）${selfChosenGap ? `，自己定了下次 ${selfChosenGap} 分钟后` : ''}`);
   await scheduleNext(state, now, L, selfChosenGap);
   process.exit(0);
 }
 
 await sendPrivate(target, text);
 state.sentToday += 1;
+state.silenceStreak = 0;
 state.lastSentAt = now;
 state.log = [...(state.log || []).slice(-60), { at: new Date(now).toISOString(), text: text.slice(0, 160), tools: result.toolCalls || 0 }];
 await mkdir(path.dirname(JOURNAL), { recursive: true });

@@ -140,13 +140,13 @@ async function readJson(file, fallback) {
 async function readSession(uin) {
   try {
     const all = JSON.parse(await readFile(SESSIONS, 'utf8'));
-    return all[`private:${uin}`]?.sessionId;
+    return all[`social:${uin}`]?.sessionId;
   } catch { return undefined; }
 }
 
 async function writeSession(uin, id) {
   const all = await readJson(SESSIONS, {});
-  all[`private:${uin}`] = { sessionId: id, updatedAt: new Date().toISOString(), nick: '' };
+  all[`social:${uin}`] = { sessionId: id, updatedAt: new Date().toISOString(), nick: '(社交线)' };
   await writeFile(SESSIONS, JSON.stringify(all, null, 2));
 }
 

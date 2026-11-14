@@ -233,14 +233,14 @@ async function readEmotion() {
 async function readSession() {
   try {
     const all = JSON.parse(await readFile(SESSIONS, 'utf8'));
-    return all[`private:${target}`]?.sessionId;
+    return all[`life:${target}`]?.sessionId;
   } catch { return undefined; }
 }
 
 async function writeSession(id) {
   let all = {};
   try { all = JSON.parse(await readFile(SESSIONS, 'utf8')); } catch { /* 空 */ }
-  all[`private:${target}`] = { sessionId: id, updatedAt: new Date().toISOString(), nick: '主人' };
+  all[`life:${target}`] = { sessionId: id, updatedAt: new Date().toISOString(), nick: '主人(生活线)' };
   await writeFile(SESSIONS, JSON.stringify(all, null, 2));
 }
 

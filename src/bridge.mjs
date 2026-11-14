@@ -643,6 +643,13 @@ async function handleText(chat, event, prompt, raw = '', parts = [], rawEvent = 
     result = await runAgent({ chat, prompt: fullPrompt, sessionId: undefined, cwd });
   }
 
+  // 会话被别的进程占着（生活线/社交线撞上了）：等一下再重试一次
+  if (result.code === 1 && /already owned by an active write handle/i.test(result.stderr)) {
+    await log(`[会话占用] ${chat.key} 重试一次`);
+    await sleep(4000);
+    result = await runAgent({ chat, prompt: fullPrompt, sessionId: previous, cwd });
+  }
+
   if (result.sessionId && result.sessionId !== previous) {
     sessions[chat.key] = { sessionId: result.sessionId, updatedAt: new Date().toISOString(), nick: chat.name };
     sessionsDirty = true;

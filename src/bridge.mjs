@@ -528,6 +528,16 @@ async function handleText(chat, event, prompt, raw = '', parts = [], rawEvent = 
 
   // 主人专用：批准 / 拒绝好友申请（别人加机器人，必须主人点头）
   const isOwner = chat.type === 'private' && (cfg.allowUsers || []).map(String).includes(String(chat.id));
+
+  // 主人的话落一份长期原始记录，供她以后回忆（work/memory-log.md）
+  if (isOwner && trimmed && !trimmed.startsWith('/')) {
+    try {
+      const memLog = path.join(cfg.workDir, 'memory-log.md');
+      const line = `- ${new Date().toISOString().slice(0, 16).replace('T', ' ')} ${trimmed.slice(0, 400)}\n`;
+      await appendFile(memLog, line);
+    } catch { /* 记不上不影响聊天 */ }
+  }
+
   const approveMatch = trimmed.match(/^[\/／]?\s*(同意|通过|拒绝|不加|待加|待批准|申请列表)\s*(\d{5,12})?\s*$/);
   if (isOwner && approveMatch) {
     const [, verb, uin] = approveMatch;

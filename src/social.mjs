@@ -38,6 +38,21 @@ const maxGap = S.maxGapMinutes ?? 420;
 const dailyCap = S.dailyCap ?? 3;
 const perUserCooldownH = S.perUserCooldownHours ?? 20;
 
+
+// 没登录就什么都别做（省得上线前的空跑刷日志、白烧 token）
+async function online() {
+  try {
+    const url = cfg.onebotHttp.replace(/\/+$/, '') + '/get_login_info';
+    const headers = { 'content-type': 'application/json' };
+    if (cfg.token) headers.authorization = `Bearer ${cfg.token}`;
+    const res = await fetch(url, { method: 'POST', headers, body: '{}' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data?.data?.user_id);
+  } catch { return false; }
+}
+if (MODE !== 'status' && !(await online())) process.exit(0);
+
 await mkdir(STATE_DIR, { recursive: true });
 const now = Date.now();
 const today = new Date().toISOString().slice(0, 10);
